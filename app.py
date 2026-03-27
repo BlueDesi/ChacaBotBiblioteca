@@ -1,4 +1,4 @@
-# app.py - Versión con chat centrado y paginación
+# app.py - Versión final con mejoras
 import streamlit as st
 import pandas as pd
 import unicodedata
@@ -64,32 +64,61 @@ def configurar_tema_oscuro():
             color: #e0e0e0 !important;
         }
         
-        /* Input de chat - CENTRADO Y RESPONSIVE */
-        [data-testid="stChatInput"] {
-            background-color: #1e1e2e;
-            border: 1px solid #2d2d44;
-            color: #e0e0e0;
-            border-radius: 30px !important;
-            padding: 12px 20px !important;
+        /* ========== INPUT DE CHAT PERFECTAMENTE CENTRADO ========== */
+        .stChatInputContainer {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin: 0 auto;
         }
         
-        /* Contenedor del chat input - centrado */
-        .stChatInputContainer {
-            max-width: 800px;
+        .stChatInputContainer > div {
+            width: 100%;
+            max-width: 700px;
             margin: 0 auto;
-            padding: 0 20px;
+        }
+        
+        div[data-testid="stChatInput"] {
+            width: 100% !important;
+            margin: 0 auto !important;
+        }
+        
+        div[data-testid="stChatInput"] textarea {
+            border-radius: 30px !important;
+            background-color: #1e1e2e !important;
+            border: 1px solid #2d2d44 !important;
+            color: #e0e0e0 !important;
+            font-size: 16px !important;
         }
         
         /* Ajuste para móviles */
         @media (max-width: 768px) {
-            .stChatInputContainer {
-                padding: 0 10px;
+            .stChatInputContainer > div {
+                max-width: 95% !important;
+                margin: 0 auto !important;
             }
-            [data-testid="stChatInput"] {
-                font-size: 14px;
+            
+            div[data-testid="stChatInput"] textarea {
+                font-size: 16px !important;
+                padding: 12px 16px !important;
             }
-            h1 {
-                font-size: 1.8rem !important;
+            
+            .main .block-container {
+                padding-left: 8px !important;
+                padding-right: 8px !important;
+            }
+        }
+        
+        /* ========== RESPUESTA DEL BIBLIOTECARIO CENTRADA ========== */
+        [data-testid="stChatMessage"] {
+            max-width: 800px;
+            margin: 0 auto 10px auto !important;
+        }
+        
+        @media (max-width: 768px) {
+            [data-testid="stChatMessage"] {
+                max-width: 95% !important;
+                margin: 0 auto 10px auto !important;
             }
         }
         
@@ -97,7 +126,21 @@ def configurar_tema_oscuro():
         [data-testid="stChatMessage"] {
             background-color: #1e1e2e;
             border-radius: 10px;
-            margin-bottom: 10px;
+        }
+        
+        /* ========== DISCLAIMER EXPERIMENTAL ========== */
+        .experimental-badge {
+            text-align: center;
+            margin: 10px 0;
+            padding: 8px;
+            background: rgba(0,255,157,0.1);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: #00ff9d;
+            border: 1px solid rgba(0,255,157,0.3);
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: auto;
         }
         
         /* Expander */
@@ -167,34 +210,26 @@ def configurar_tema_oscuro():
             background: #00ff9d;
         }
         
-        /* Estilo para el footer */
+        /* Estilo para el footer SIMPLIFICADO */
         .footer {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%);
-            color: #888;
+            color: #00ff9d;
             text-align: center;
-            padding: 0.8rem;
-            font-size: 0.8rem;
+            padding: 0.5rem;
+            font-size: 0.7rem;
             border-top: 1px solid #2d2d44;
             z-index: 999;
             font-family: 'Share Tech Mono', monospace;
-        }
-        
-        .footer a {
-            color: #00ff9d;
-            text-decoration: none;
-        }
-        
-        .footer a:hover {
-            text-decoration: underline;
+            letter-spacing: 1px;
         }
         
         /* Ajuste para que el contenido no quede oculto detrás del footer */
         .main .block-container {
-            padding-bottom: 70px;
+            padding-bottom: 50px;
         }
         
         /* Contenedor de paginación centrado */
@@ -244,14 +279,14 @@ def mostrar_titulo_con_logo():
         mime_type = f"image/{extension}" if extension != 'jpg' else "image/jpeg"
         
         st.markdown(f"""
-        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 30px 0; gap: 15px; flex-wrap: wrap; text-align: center;">
+        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 20px 0; gap: 15px; flex-wrap: wrap; text-align: center;">
             <img src="data:{mime_type};base64,{encoded_string}" 
-                 style="width: 60px; height: 60px; border-radius: 12px; 
+                 style="width: 55px; height: 55px; border-radius: 12px; 
                         box-shadow: 0 0 15px rgba(0,255,157,0.3);
                         animation: pulse 2s infinite;">
             <div>
-                <h1 style="margin: 0; color: #00ff9d; font-size: 2.5rem;">📖 Bibliotecario Virtual</h1>
-                <p style="margin: 5px 0 0 0; color: #888;">Inteligencia Artificial para tu biblioteca</p>
+                <h1 style="margin: 0; color: #00ff9d; font-size: 2rem;">📖 Bibliotecario Virtual</h1>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 0.8rem;">Búsqueda en catálogo local</p>
             </div>
         </div>
         <style>
@@ -264,37 +299,41 @@ def mostrar_titulo_con_logo():
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
-        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 30px 0; gap: 15px; flex-wrap: wrap; text-align: center;">
+        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 20px 0; gap: 15px; flex-wrap: wrap; text-align: center;">
             <div style="
                 background: linear-gradient(135deg, #00ff9d, #0066cc);
-                width: 60px;
-                height: 60px;
+                width: 55px;
+                height: 55px;
                 border-radius: 12px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 32px;
+                font-size: 28px;
                 box-shadow: 0 0 15px rgba(0,255,157,0.3);
                 animation: pulse 2s infinite;
             ">
                 📚
             </div>
             <div>
-                <h1 style="margin: 0; color: #00ff9d; font-size: 2.5rem;">📖 Bibliotecario Virtual</h1>
-                <p style="margin: 5px 0 0 0; color: #888;">Inteligencia Artificial para tu biblioteca</p>
+                <h1 style="margin: 0; color: #00ff9d; font-size: 2rem;">📖 Bibliotecario Virtual</h1>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 0.8rem;">Búsqueda en catálogo local</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
 def mostrar_footer():
-    """Muestra el pie de página con el crédito del proyecto"""
+    """Muestra el pie de página simplificado"""
     st.markdown("""
     <div class="footer">
-        <span>📚 Proyecto Diseño e Implementación de Sitios Web Dinámicos</span>
-        <span style="margin: 0 10px;">•</span>
-        <span>🔧 Biblioteca Virtual con IA</span>
-        <span style="margin: 0 10px;">•</span>
-        <span>⚡ Powered by Groq & Streamlit</span>
+        PISWD 2027
+    </div>
+    """, unsafe_allow_html=True)
+
+def mostrar_disclaimer():
+    """Muestra el disclaimer de modo experimental"""
+    st.markdown("""
+    <div class="experimental-badge">
+        ⚡ MODO EXPERIMENTAL - Los resultados pueden ser parciales ⚡
     </div>
     """, unsafe_allow_html=True)
 
@@ -501,7 +540,7 @@ def obtener_respuesta_groq(consulta, resultados, df):
         api_key = st.secrets.get("GROQ_API_KEY")
         
         if not api_key:
-            return "⚠️ Error: No se encontró la API key. Configúrala en Streamlit Secrets."
+            return "⚠️ Error: No se encontró la API key."
         
         client = Groq(api_key=api_key)
         
@@ -510,21 +549,18 @@ def obtener_respuesta_groq(consulta, resultados, df):
             for r in resultados[:10]:
                 datos = r['datos']
                 contexto_str.append(
-                    f"- TÍTULO: {datos['Titulo']} | AUTOR: {datos['Autor']} ({datos['Año']}) | "
-                    f"EJEMPLARES: {datos['Ejemplares']} | TEMAS: {datos['Temas']}"
+                    f"- {datos['Titulo']} | {datos['Autor']} ({datos['Año']}) | "
+                    f"Ejemplares: {datos['Ejemplares']} | Temas: {datos['Temas']}"
                 )
             
             contexto = f"""
-LIBROS ENCONTRADOS EN LA BASE DE DATOS:
+LIBROS ENCONTRADOS:
 {chr(10).join(contexto_str)}
 
-INSTRUCCIÓN ESTRICTA: 
-- SOLO puedes mencionar los libros listados arriba.
-- NO inventes títulos, autores o temas.
-- Si el usuario pregunta por algo que no está en esta lista, dile que no está disponible.
+INSTRUCCIÓN: SOLO menciona los libros listados arriba. NO inventes títulos.
 """
         else:
-            contexto = "NO SE ENCONTRARON LIBROS EN LA BASE DE DATOS PARA ESTA BÚSQUEDA."
+            contexto = "NO HAY LIBROS EN LA BASE DE DATOS."
         
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -532,10 +568,8 @@ INSTRUCCIÓN ESTRICTA:
                 {
                     "role": "system",
                     "content": (
-                        "Eres un bibliotecario amable y servicial. "
-                        "SOLO respondes con información de la base de datos proporcionada. "
-                        "Si no hay resultados, dices claramente que no hay libros sobre ese tema. "
-                        "NUNCA inventas títulos, autores ni sugerencias fuera del catálogo.\n\n"
+                        "Eres un bibliotecario. SOLO respondes con los libros listados. "
+                        "Si no hay resultados, dices que no hay. NUNCA inventes libros.\n\n"
                         f"{contexto}"
                     )
                 },
@@ -545,11 +579,11 @@ INSTRUCCIÓN ESTRICTA:
                 }
             ],
             temperature=0.0,
-            max_tokens=300
+            max_tokens=200
         )
         return completion.choices[0].message.content
     except Exception as e:
-        return f"❌ Error al conectar con Groq: {str(e)}"
+        return f"❌ Error: {str(e)}"
 
 # ==========================================
 # INTERFAZ PRINCIPAL
@@ -561,6 +595,9 @@ def main():
     
     # Mostrar título con logo integrado
     mostrar_titulo_con_logo()
+    
+    # Mostrar disclaimer experimental
+    mostrar_disclaimer()
     
     # Sidebar
     with st.sidebar:
@@ -644,23 +681,22 @@ def main():
                     respuesta = obtener_respuesta_groq(consulta, resultados, df)
                 
                 st.markdown("---")
-                st.markdown("### 💬 Respuesta del bibliotecario:")
+                st.markdown("### 💬 Respuesta:")
                 st.info(respuesta)
                 
                 if resultados:
-                    st.caption(f"✨ Mejor coincidencia: {resultados[0]['puntaje']}% | Total: {len(resultados)} resultados")
+                    st.caption(f"✨ Coincidencia: {resultados[0]['puntaje']}% | {len(resultados)} resultados")
                 
             else:
                 st.warning(f"❌ No encontré libros sobre '{consulta}' en nuestro catálogo.")
                 st.markdown("""
                 💡 **Sugerencias:**
-                - Revisa la ortografía de tu búsqueda
+                - Revisa la ortografía
                 - Prueba con palabras más generales
-                - Busca por autor en lugar de título completo
-                - Busca por tema o categoría
+                - Busca por autor o tema
                 """)
     
-    # Mostrar footer al final
+    # Mostrar footer simplificado
     mostrar_footer()
 
 if __name__ == "__main__":
