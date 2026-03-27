@@ -1,19 +1,152 @@
-# app.py - Versión con ruta específica data/BD.xlsx
+
+# app.py - Versión con logo
 import streamlit as st
 import pandas as pd
 import unicodedata
 import os
 from groq import Groq
+from PIL import Image
+import base64
+from pathlib import Path
 
-# Configuración de página
+# Configuración de página - DEBE SER EL PRIMER COMANDO DE STREAMLIT
 st.set_page_config(
     page_title="Bibliotecario Virtual",
     page_icon="📚",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # ==========================================
-# FUNCIONES
+# FUNCIÓN PARA CARGAR LOGO
+# ==========================================
+
+def cargar_logo():
+    """Carga el logo desde la carpeta images"""
+    # Rutas posibles para el logo
+    rutas_logo = [
+        "images/logo.png",
+        "images/logo.jpg",
+        "images/logo.jpeg",
+        "logo.png",
+        "static/logo.png"
+    ]
+    
+    for ruta in rutas_logo:
+        if os.path.exists(ruta):
+            try:
+                # Cargar imagen con PIL para verificar que es válida
+                img = Image.open(ruta)
+                return ruta, img
+            except Exception as e:
+                st.warning(f"No se pudo cargar el logo desde {ruta}: {e}")
+                continue
+    
+    return None, None
+
+def agregar_logo_css():
+    """Agrega CSS personalizado para posicionar el logo en la esquina superior derecha"""
+    st.markdown("""
+    <style>
+        /* Posicionar el logo en la esquina superior derecha */
+        .logo-container {
+            position: fixed;
+            top: 0.5rem;
+            right: 1rem;
+            z-index: 999;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            pointer-events: none; /* Permite hacer clic a través del logo */
+        }
+        
+        .logo-img {
+            max-width: 60px;
+            max-height: 60px;
+            width: auto;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            pointer-events: auto; /* Permite interactuar con el logo si es necesario */
+        }
+        
+        .logo-img:hover {
+            transform: scale(1.05);
+        }
+        
+        /* Ajustes para móviles */
+        @media (max-width: 768px) {
+            .logo-img {
+                max-width: 45px;
+                max-height: 45px;
+            }
+        }
+        
+        /* Ajuste para evitar que el logo cubra contenido importante */
+        .main-header {
+            margin-top: 0;
+            padding-top: 0;
+        }
+        
+        /* Ajuste del título principal para dar espacio al logo */
+        .stApp header {
+            background-color: transparent;
+        }
+        
+        /* Personalización del sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #f8f9fa;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+def mostrar_logo():
+    """Muestra el logo en la esquina superior derecha usando HTML"""
+    ruta_logo, img = cargar_logo()
+    
+    if ruta_logo:
+        # Convertir imagen a base64 para mostrarla en HTML
+        with open(ruta_logo, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+        
+        # Determinar el tipo de imagen
+        extension = ruta_logo.split('.')[-1].lower()
+        mime_type = f"image/{extension}" if extension != 'jpg' else "image/jpeg"
+        
+        # HTML para mostrar el logo
+        logo_html = f"""
+        <div class="logo-container">
+            <img src="data:{mime_type};base64,{encoded_string}" 
+                 class="logo-img" 
+                 alt="Logo Biblioteca"
+                 title="Biblioteca Virtual">
+        </div>
+        """
+        st.markdown(logo_html, unsafe_allow_html=True)
+    else:
+        # Logo por defecto si no se encuentra el archivo
+        st.markdown("""
+        <div class="logo-container">
+            <div style="
+                background-color: #0066cc;
+                color: white;
+                width: 50px;
+                height: 50px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            ">
+                📚
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ==========================================
+# FUNCIONES PRINCIPALES
 # ==========================================
 
 def normalizar(texto):
@@ -61,8 +194,6 @@ def cargar_datos():
             else:
                 df['Ejemplares'] = pd.to_numeric(df['Ejemplares'], errors='coerce').fillna(1).astype(int)
             
-            st.sidebar.success(f"✅ BD cargada desde data/BD.xlsx")
-            st.sidebar.info(f"📊 {len(df)} libros | {df['Ejemplares'].sum()} ejemplares")
             return df
             
         except Exception as e:
@@ -71,7 +202,6 @@ def cargar_datos():
     
     # Si no existe el archivo, mostrar error
     st.sidebar.error("❌ No se encontró el archivo data/BD.xlsx")
-    st.sidebar.info("💡 Asegúrate de que el archivo esté en la carpeta 'data' con el nombre 'BD.xlsx'")
     return None
 
 def busqueda_exhaustiva(termino, df):
@@ -140,7 +270,7 @@ def obtener_respuesta_groq(consulta, resultados, df):
         api_key = st.secrets.get("GROQ_API_KEY")
         
         if not api_key:
-            return "⚠️ Error: No se encontró la API key. Configúrala en Streamlit Secrets (Settings → Secrets)."
+            return "⚠️ Error: No se encontró la API key. Configúrala en Streamlit Secrets."
         
         client = Groq(api_key=api_key)
         
@@ -185,7 +315,7 @@ INSTRUCCIÓN ESTRICTA:
                     "content": consulta
                 }
             ],
-            temperature=0.0,  # Temperatura 0 para máxima precisión
+            temperature=0.0,
             max_tokens=300
         )
         return completion.choices[0].message.content
@@ -197,9 +327,22 @@ INSTRUCCIÓN ESTRICTA:
 # ==========================================
 
 def main():
+    # Aplicar CSS para el logo
+    agregar_logo_css()
+    
+    # Mostrar el logo en la esquina superior derecha
+    mostrar_logo()
+    
     # Sidebar
     with st.sidebar:
-        st.title("📚 Biblioteca Virtual")
+        # Logo pequeño en el sidebar también (opcional)
+        st.markdown("""
+        <div style="text-align: center; margin-bottom: 20px;">
+            <span style="font-size: 40px;">📚</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.title("Biblioteca Virtual")
         st.markdown("---")
         
         # Cargar datos desde data/BD.xlsx
@@ -256,22 +399,10 @@ def main():
            - Ejemplares
            - Ideas principales
         """)
-        
-        # Mostrar estructura de archivos actual
-        import os
-        st.markdown("### 📂 Estructura de archivos detectada:")
-        for root, dirs, files in os.walk("."):
-            level = root.replace(".", "").count(os.sep)
-            indent = " " * 2 * level
-            st.text(f"{indent}📁 {os.path.basename(root)}/")
-            subindent = " " * 2 * (level + 1)
-            for file in files[:10]:  # Mostrar primeros 10 archivos
-                st.text(f"{subindent}📄 {file}")
         return
     
     # Vista previa del catálogo
     with st.expander("📚 Ver catálogo completo", expanded=False):
-        # Mostrar tabla con los primeros libros
         df_preview = df[['Id', 'Titulo', 'Autor', 'Año', 'Ejemplares', 'Temas']].head(20)
         st.dataframe(df_preview, use_container_width=True)
         st.caption(f"Mostrando 20 de {len(df)} libros totales")
@@ -322,14 +453,12 @@ def main():
                 st.markdown("### 💬 Respuesta del bibliotecario:")
                 st.info(respuesta)
                 
-                # Mostrar nivel de coincidencia
                 if resultados:
                     st.caption(f"✨ Mejor coincidencia: {resultados[0]['puntaje']}%")
                 
             else:
                 st.warning(f"❌ No encontré libros sobre '{consulta}' en nuestro catálogo.")
                 
-                # Sugerencias
                 st.markdown("""
                 💡 **Sugerencias:**
                 - Revisa la ortografía de tu búsqueda
@@ -340,3 +469,58 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+def agregar_logo_css():
+    """Agrega CSS personalizado con estilo geek"""
+    st.markdown("""
+    <style>
+        /* Estilo geek para el logo */
+        .logo-container {
+            position: fixed;
+            top: 0.5rem;
+            right: 1rem;
+            z-index: 999;
+        }
+        
+        .logo-img {
+            max-width: 70px;
+            max-height: 70px;
+            border-radius: 15px;
+            box-shadow: 0 0 15px rgba(0,102,204,0.3);
+            transition: all 0.3s ease;
+            filter: drop-shadow(0 0 5px #0066cc);
+            animation: pulse 2s infinite;
+        }
+        
+        .logo-img:hover {
+            transform: rotate(5deg) scale(1.1);
+            filter: drop-shadow(0 0 10px #0066cc);
+        }
+        
+        @keyframes pulse {
+            0% {
+                filter: drop-shadow(0 0 2px #0066cc);
+            }
+            50% {
+                filter: drop-shadow(0 0 10px #0066cc);
+            }
+            100% {
+                filter: drop-shadow(0 0 2px #0066cc);
+            }
+        }
+        
+        /* Efecto matrix para el fondo del sidebar (opcional) */
+        [data-testid="stSidebar"] {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #0f0;
+        }
+        
+        /* Fuente geek para títulos */
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        
+        h1, h2, h3 {
+            font-family: 'Share Tech Mono', monospace;
+            letter-spacing: 2px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
