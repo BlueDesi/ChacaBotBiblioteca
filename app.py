@@ -1,4 +1,4 @@
-# app.py - Versión final con mejoras
+# app.py - Versión final con respuesta 100% basada en BD
 import streamlit as st
 import pandas as pd
 import unicodedata
@@ -535,7 +535,7 @@ def mostrar_catalogo_paginado(df, items_por_pagina=15):
     st.caption(f"Total: {total_libros} libros")
 
 def obtener_respuesta_groq(consulta, resultados, df):
-    """Obtener respuesta de Groq con los resultados"""
+    """Obtener respuesta de Groq con los resultados - SOLO USA RESULTADOS REALES"""
     try:
         api_key = st.secrets.get("GROQ_API_KEY")
         
@@ -545,22 +545,37 @@ def obtener_respuesta_groq(consulta, resultados, df):
         client = Groq(api_key=api_key)
         
         if resultados:
-            contexto_str = []
-            for r in resultados[:10]:
+            # Construir lista detallada de libros REALES
+            libros_lista = []
+            for r in resultados:
                 datos = r['datos']
-                contexto_str.append(
-                    f"- {datos['Titulo']} | {datos['Autor']} ({datos['Año']}) | "
-                    f"Ejemplares: {datos['Ejemplares']} | Temas: {datos['Temas']}"
+                libros_lista.append(
+                    f"• {datos['Titulo']} - Autor: {datos['Autor']} ({datos['Año']}) - {datos['Ejemplares']} ejemplares - Tema: {datos['Temas']}"
                 )
             
+            # Crear contexto MUY ESTRICTO
             contexto = f"""
-LIBROS ENCONTRADOS:
-{chr(10).join(contexto_str)}
+ESTOS SON LOS ÚNICOS LIBROS DISPONIBLES EN LA BIBLIOTECA QUE COINCIDEN CON LA BÚSQUEDA:
 
-INSTRUCCIÓN: SOLO menciona los libros listados arriba. NO inventes títulos.
+{chr(10).join(libros_lista)}
+
+REGLAS ABSOLUTAS QUE DEBES SEGUIR ESTRICTAMENTE:
+1. SOLO puedes mencionar los libros que están en la lista de arriba.
+2. NO inventes ningún libro, autor, título o recomendación.
+3. NO menciones libros que no estén en la lista.
+4. Si el usuario pide recomendaciones, solo recomienda los libros de esta lista.
+5. Si no hay libros sobre un tema específico, dices que no hay disponibles.
+6. Tu respuesta debe basarse EXCLUSIVAMENTE en los libros listados arriba.
 """
         else:
-            contexto = "NO HAY LIBROS EN LA BASE DE DATOS."
+            contexto = """
+NO HAY LIBROS EN LA BASE DE DATOS QUE COINCIDAN CON ESTA BÚSQUEDA.
+
+REGLAS:
+1. Dile al usuario que no hay libros disponibles sobre ese tema.
+2. NO inventes libros ni recomendaciones.
+3. Sugiere que pruebe con otros términos de búsqueda como autor, tema o título parcial.
+"""
         
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -568,18 +583,21 @@ INSTRUCCIÓN: SOLO menciona los libros listados arriba. NO inventes títulos.
                 {
                     "role": "system",
                     "content": (
-                        "Eres un bibliotecario. SOLO respondes con los libros listados. "
-                        "Si no hay resultados, dices que no hay. NUNCA inventes libros.\n\n"
+                        "Eres un bibliotecario que trabaja en una biblioteca real. "
+                        "SOLO respondes con los libros listados en el contexto. "
+                        "Tu trabajo es ayudar al usuario a encontrar libros de la biblioteca. "
+                        "NUNCA mencionas libros que no estén explícitamente en la lista. "
+                        "Si el usuario pide recomendaciones sobre un tema, revisa los temas de los libros listados.\n\n"
                         f"{contexto}"
                     )
                 },
                 {
                     "role": "user",
-                    "content": consulta
+                    "content": f"El usuario pregunta: '{consulta}'. Basándote SOLO en los libros listados en el contexto, responde de manera útil y precisa."
                 }
             ],
             temperature=0.0,
-            max_tokens=200
+            max_tokens=300
         )
         return completion.choices[0].message.content
     except Exception as e:
@@ -677,15 +695,15 @@ def main():
                 # Mostrar resultados paginados
                 mostrar_resultados_paginados(resultados, items_por_pagina=6)
                 
-                with st.spinner("💭 Generando respuesta..."):
+                with st.spinner("💭 Generando respuesta basada en los libros de tu biblioteca..."):
                     respuesta = obtener_respuesta_groq(consulta, resultados, df)
                 
                 st.markdown("---")
-                st.markdown("### 💬 Respuesta:")
-                st.info(respuesta)
+                st.markdown("### 💬 Respuesta del bibliotecario:")
+                st.info(f"📖 **Basado en los {len(resultados)} libros encontrados:**\n\n{respuesta}")
                 
                 if resultados:
-                    st.caption(f"✨ Coincidencia: {resultados[0]['puntaje']}% | {len(resultados)} resultados")
+                    st.caption(f"✨ Los libros mostrados arriba son los que tenemos en nuestra biblioteca. La respuesta se basa EXCLUSIVAMENTE en estos libros.")
                 
             else:
                 st.warning(f"❌ No encontré libros sobre '{consulta}' en nuestro catálogo.")
