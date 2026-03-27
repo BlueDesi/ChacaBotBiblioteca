@@ -1,5 +1,5 @@
 
-# app.py - Versión con logo
+# app.py - Versión con tema oscuro y logo
 import streamlit as st
 import pandas as pd
 import unicodedata
@@ -7,7 +7,6 @@ import os
 from groq import Groq
 from PIL import Image
 import base64
-from pathlib import Path
 
 # Configuración de página - DEBE SER EL PRIMER COMANDO DE STREAMLIT
 st.set_page_config(
@@ -18,12 +17,143 @@ st.set_page_config(
 )
 
 # ==========================================
+# CONFIGURACIÓN DE TEMA OSCURO
+# ==========================================
+
+def configurar_tema_oscuro():
+    """Configura el tema oscuro completo para toda la app"""
+    st.markdown("""
+    <style>
+        /* Tema oscuro global */
+        .stApp {
+            background-color: #0e1117;
+        }
+        
+        /* Sidebar oscuro */
+        [data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            border-right: 1px solid #2d2d44;
+        }
+        
+        [data-testid="stSidebar"] * {
+            color: #e0e0e0 !important;
+        }
+        
+        [data-testid="stSidebar"] .stMarkdown {
+            color: #e0e0e0;
+        }
+        
+        /* Métricas en sidebar */
+        [data-testid="stSidebar"] [data-testid="stMetricValue"] {
+            color: #00ff9d !important;
+        }
+        
+        [data-testid="stSidebar"] [data-testid="stMetricLabel"] {
+            color: #888 !important;
+        }
+        
+        /* Main content oscuro */
+        .main .block-container {
+            background-color: #0e1117;
+        }
+        
+        /* Títulos */
+        h1, h2, h3, h4, h5, h6 {
+            color: #00ff9d !important;
+            font-family: 'Share Tech Mono', monospace;
+        }
+        
+        /* Texto normal */
+        p, li, span, div {
+            color: #e0e0e0 !important;
+        }
+        
+        /* Input de chat */
+        [data-testid="stChatInput"] {
+            background-color: #1e1e2e;
+            border: 1px solid #2d2d44;
+            color: #e0e0e0;
+        }
+        
+        /* Mensajes de chat */
+        [data-testid="stChatMessage"] {
+            background-color: #1e1e2e;
+            border-radius: 10px;
+        }
+        
+        /* Expander */
+        .streamlit-expanderHeader {
+            background-color: #1e1e2e;
+            color: #00ff9d !important;
+            border-radius: 8px;
+        }
+        
+        /* Dataframe */
+        .stDataFrame {
+            background-color: #1e1e2e;
+        }
+        
+        /* Info, warning, error boxes */
+        .stAlert {
+            background-color: #1e1e2e;
+            border-left: 4px solid #00ff9d;
+        }
+        
+        .stAlert p {
+            color: #e0e0e0 !important;
+        }
+        
+        /* Botones */
+        .stButton button {
+            background-color: #2d2d44;
+            color: #00ff9d;
+            border: none;
+            border-radius: 8px;
+        }
+        
+        .stButton button:hover {
+            background-color: #3d3d5e;
+        }
+        
+        /* Spinner */
+        .stSpinner {
+            color: #00ff9d;
+        }
+        
+        /* Fuente geek */
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        
+        body, .stApp {
+            font-family: 'Share Tech Mono', monospace;
+        }
+        
+        /* Scrollbar oscuro */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #1e1e2e;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #2d2d44;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00ff9d;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+# ==========================================
 # FUNCIÓN PARA CARGAR LOGO
 # ==========================================
 
 def cargar_logo():
     """Carga el logo desde la carpeta images"""
-    # Rutas posibles para el logo
     rutas_logo = [
         "images/logo.png",
         "images/logo.jpg",
@@ -35,110 +165,61 @@ def cargar_logo():
     for ruta in rutas_logo:
         if os.path.exists(ruta):
             try:
-                # Cargar imagen con PIL para verificar que es válida
                 img = Image.open(ruta)
                 return ruta, img
             except Exception as e:
-                st.warning(f"No se pudo cargar el logo desde {ruta}: {e}")
                 continue
     
     return None, None
 
-def agregar_logo_css():
-    """Agrega CSS personalizado para posicionar el logo en la esquina superior derecha"""
-    st.markdown("""
-    <style>
-        /* Posicionar el logo en la esquina superior derecha */
-        .logo-container {
-            position: fixed;
-            top: 0.5rem;
-            right: 1rem;
-            z-index: 999;
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            pointer-events: none; /* Permite hacer clic a través del logo */
-        }
-        
-        .logo-img {
-            max-width: 60px;
-            max-height: 60px;
-            width: auto;
-            height: auto;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
-            pointer-events: auto; /* Permite interactuar con el logo si es necesario */
-        }
-        
-        .logo-img:hover {
-            transform: scale(1.05);
-        }
-        
-        /* Ajustes para móviles */
-        @media (max-width: 768px) {
-            .logo-img {
-                max-width: 45px;
-                max-height: 45px;
-            }
-        }
-        
-        /* Ajuste para evitar que el logo cubra contenido importante */
-        .main-header {
-            margin-top: 0;
-            padding-top: 0;
-        }
-        
-        /* Ajuste del título principal para dar espacio al logo */
-        .stApp header {
-            background-color: transparent;
-        }
-        
-        /* Personalización del sidebar */
-        [data-testid="stSidebar"] {
-            background-color: #f8f9fa;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
 def mostrar_logo():
-    """Muestra el logo en la esquina superior derecha usando HTML"""
+    """Muestra el logo en la esquina superior derecha"""
     ruta_logo, img = cargar_logo()
     
     if ruta_logo:
-        # Convertir imagen a base64 para mostrarla en HTML
         with open(ruta_logo, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         
-        # Determinar el tipo de imagen
         extension = ruta_logo.split('.')[-1].lower()
         mime_type = f"image/{extension}" if extension != 'jpg' else "image/jpeg"
         
-        # HTML para mostrar el logo
         logo_html = f"""
-        <div class="logo-container">
+        <div style="position: fixed; top: 0.5rem; right: 1rem; z-index: 999;">
             <img src="data:{mime_type};base64,{encoded_string}" 
-                 class="logo-img" 
+                 style="max-width: 60px; max-height: 60px; border-radius: 12px; 
+                        box-shadow: 0 0 15px rgba(0,255,157,0.3);
+                        transition: transform 0.3s ease;
+                        animation: pulse 2s infinite;"
                  alt="Logo Biblioteca"
-                 title="Biblioteca Virtual">
+                 title="Biblioteca Virtual"
+                 onmouseover="this.style.transform='scale(1.05)'"
+                 onmouseout="this.style.transform='scale(1)'">
         </div>
+        <style>
+            @keyframes pulse {{
+                0% {{ box-shadow: 0 0 5px rgba(0,255,157,0.3); }}
+                50% {{ box-shadow: 0 0 20px rgba(0,255,157,0.6); }}
+                100% {{ box-shadow: 0 0 5px rgba(0,255,157,0.3); }}
+            }}
+        </style>
         """
         st.markdown(logo_html, unsafe_allow_html=True)
     else:
-        # Logo por defecto si no se encuentra el archivo
         st.markdown("""
-        <div class="logo-container">
+        <div style="position: fixed; top: 0.5rem; right: 1rem; z-index: 999;">
             <div style="
-                background-color: #0066cc;
-                color: white;
-                width: 50px;
-                height: 50px;
-                border-radius: 10px;
+                background: linear-gradient(135deg, #00ff9d, #0066cc);
+                color: #0e1117;
+                width: 55px;
+                height: 55px;
+                border-radius: 12px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 24px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                font-size: 28px;
+                font-weight: bold;
+                box-shadow: 0 0 15px rgba(0,255,157,0.3);
+                animation: pulse 2s infinite;
             ">
                 📚
             </div>
@@ -176,19 +257,13 @@ def extraer_apellidos(nombre_autor):
 
 def cargar_datos():
     """Carga los datos desde data/BD.xlsx"""
-    
-    # Ruta específica para tu archivo
     ruta_bd = "data/BD.xlsx"
     
-    # Verificar si existe el archivo
     if os.path.exists(ruta_bd):
         try:
             df = pd.read_excel(ruta_bd)
-            
-            # Limpiar nombres de columnas
             df.columns = [c.strip() for c in df.columns]
             
-            # Verificar campos
             if 'Ejemplares' not in df.columns:
                 df['Ejemplares'] = 1
             else:
@@ -200,7 +275,6 @@ def cargar_datos():
             st.sidebar.error(f"Error al cargar BD: {e}")
             return None
     
-    # Si no existe el archivo, mostrar error
     st.sidebar.error("❌ No se encontró el archivo data/BD.xlsx")
     return None
 
@@ -216,31 +290,22 @@ def busqueda_exhaustiva(termino, df):
     
     for idx, row in df.iterrows():
         puntaje = 0
-        razones = []
         
         titulo = normalizar(row.get('Titulo', ''))
         autor = normalizar(row.get('Autor', ''))
         temas = normalizar(row.get('Temas', ''))
         subtemas = normalizar(row.get('SubTemas', ''))
         
-        # Búsqueda por título
         if termino_norm in titulo:
             puntaje += 100
-            razones.append("título")
-        
-        # Búsqueda por autor
         if termino_norm in autor:
             puntaje += 80
-            razones.append("autor")
         
-        # Búsqueda por apellido
         apellidos_autor = extraer_apellidos(row.get('Autor', ''))
         for apellido in apellidos_autor:
             if apellido in termino_norm or termino_norm in apellido:
                 puntaje += 70
-                razones.append(f"apellido '{apellido}'")
         
-        # Búsqueda por palabras individuales
         for palabra in palabras_busqueda:
             if len(palabra) > 2:
                 if palabra in titulo:
@@ -256,7 +321,6 @@ def busqueda_exhaustiva(termino, df):
             resultados.append({
                 'idx': idx,
                 'puntaje': puntaje,
-                'razones': razones,
                 'datos': row
             })
     
@@ -266,7 +330,6 @@ def busqueda_exhaustiva(termino, df):
 def obtener_respuesta_groq(consulta, resultados, df):
     """Obtener respuesta de Groq con los resultados"""
     try:
-        # Obtener API key de secrets
         api_key = st.secrets.get("GROQ_API_KEY")
         
         if not api_key:
@@ -274,7 +337,6 @@ def obtener_respuesta_groq(consulta, resultados, df):
         
         client = Groq(api_key=api_key)
         
-        # Construir contexto
         if resultados:
             contexto_str = []
             for r in resultados[:10]:
@@ -296,7 +358,6 @@ INSTRUCCIÓN ESTRICTA:
         else:
             contexto = "NO SE ENCONTRARON LIBROS EN LA BASE DE DATOS PARA ESTA BÚSQUEDA."
         
-        # Llamar a Groq
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -327,25 +388,24 @@ INSTRUCCIÓN ESTRICTA:
 # ==========================================
 
 def main():
-    # Aplicar CSS para el logo
-    agregar_logo_css()
+    # Configurar tema oscuro
+    configurar_tema_oscuro()
     
     # Mostrar el logo en la esquina superior derecha
     mostrar_logo()
     
     # Sidebar
     with st.sidebar:
-        # Logo pequeño en el sidebar también (opcional)
         st.markdown("""
-        <div style="text-align: center; margin-bottom: 20px;">
-            <span style="font-size: 40px;">📚</span>
+        <div style="text-align: center; margin: 20px 0;">
+            <span style="font-size: 48px;">📚</span>
+            <h2 style="color: #00ff9d; margin: 10px 0;">Biblioteca</h2>
+            <p style="color: #888;">Virtual Assistant</p>
         </div>
         """, unsafe_allow_html=True)
         
-        st.title("Biblioteca Virtual")
         st.markdown("---")
         
-        # Cargar datos desde data/BD.xlsx
         df = cargar_datos()
         
         if df is not None:
@@ -358,7 +418,6 @@ def main():
             
             st.markdown("---")
             
-            # Mostrar autores destacados
             if 'Autor' in df.columns:
                 st.markdown("### ✍️ Autores destacados")
                 autores_top = df['Autor'].value_counts().head(5)
@@ -368,7 +427,6 @@ def main():
             
             st.markdown("---")
             
-            # Mostrar temas populares
             if 'Temas' in df.columns:
                 st.markdown("### 🏷️ Temas populares")
                 temas_top = df['Temas'].value_counts().head(5)
@@ -377,11 +435,15 @@ def main():
                         st.write(f"• {tema[:30]} ({count})")
             
             st.markdown("---")
-            st.caption(f"📁 Fuente: data/BD.xlsx")
+            st.caption(f"📁 data/BD.xlsx")
     
     # Main content
-    st.title("📖 Bibliotecario Virtual")
-    st.markdown("Pregúntame sobre los libros disponibles en nuestra biblioteca")
+    st.markdown("""
+    <div style="text-align: center; margin: 20px 0 40px 0;">
+        <h1>📖 Bibliotecario Virtual</h1>
+        <p style="color: #888;">Pregúntame sobre los libros disponibles en nuestra biblioteca</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     if df is None:
         st.error("❌ No se pudo cargar la base de datos")
@@ -389,63 +451,48 @@ def main():
         ### 📋 Solución:
         1. Asegúrate de que el archivo **BD.xlsx** esté en la carpeta **data/**
         2. Verifica que tenga estas columnas:
-           - Id
-           - Titulo
-           - Autor
-           - Año
-           - ISBN
-           - Temas
-           - SubTemas
-           - Ejemplares
-           - Ideas principales
+           - Id, Titulo, Autor, Año, ISBN, Temas, SubTemas, Ejemplares, Ideas principales
         """)
         return
     
-    # Vista previa del catálogo
     with st.expander("📚 Ver catálogo completo", expanded=False):
         df_preview = df[['Id', 'Titulo', 'Autor', 'Año', 'Ejemplares', 'Temas']].head(20)
         st.dataframe(df_preview, use_container_width=True)
         st.caption(f"Mostrando 20 de {len(df)} libros totales")
     
-    # Input de consulta
     consulta = st.chat_input("🔍 Escribe tu consulta aquí...")
     
     if consulta:
-        # Mostrar consulta del usuario
         with st.chat_message("user"):
             st.write(consulta)
         
-        # Buscar en BD
         with st.spinner("🔍 Buscando en la biblioteca..."):
             resultados = busqueda_exhaustiva(consulta, df)
         
-        # Mostrar resultados
         with st.chat_message("assistant"):
             if resultados:
                 st.markdown("### 📚 Resultados encontrados:")
                 
-                # Mostrar en tarjetas
                 cols = st.columns(2)
                 for i, r in enumerate(resultados[:6]):
                     with cols[i % 2]:
                         datos = r['datos']
                         st.markdown(f"""
                         <div style="
-                            background-color: #f8f9fa;
-                            padding: 0.8rem;
-                            border-radius: 0.5rem;
+                            background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+                            padding: 1rem;
+                            border-radius: 12px;
                             margin: 0.5rem 0;
-                            border-left: 4px solid #0066cc;
-                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                            border-left: 4px solid #00ff9d;
+                            transition: transform 0.2s ease;
                         ">
-                            <strong style="font-size: 1rem;">📖 {datos['Titulo']}</strong><br>
-                            <span style="color: #666;">✍️ {datos['Autor']} ({datos['Año']})</span><br>
-                            <span style="color: #28a745;">📊 {datos['Ejemplares']} ejemplar(es)</span><br>
+                            <strong style="font-size: 1rem; color: #00ff9d;">📖 {datos['Titulo']}</strong><br>
+                            <span style="color: #aaa;">✍️ {datos['Autor']} ({datos['Año']})</span><br>
+                            <span style="color: #00ff9d;">📊 {datos['Ejemplares']} ejemplar(es)</span><br>
                             <span style="color: #888; font-size: 0.8rem;">🏷️ {datos['Temas']}</span>
                         </div>
                         """, unsafe_allow_html=True)
                 
-                # Obtener respuesta de Groq
                 with st.spinner("💭 Generando respuesta..."):
                     respuesta = obtener_respuesta_groq(consulta, resultados, df)
                 
@@ -458,7 +505,6 @@ def main():
                 
             else:
                 st.warning(f"❌ No encontré libros sobre '{consulta}' en nuestro catálogo.")
-                
                 st.markdown("""
                 💡 **Sugerencias:**
                 - Revisa la ortografía de tu búsqueda
@@ -469,58 +515,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-def agregar_logo_css():
-    """Agrega CSS personalizado con estilo geek"""
-    st.markdown("""
-    <style>
-        /* Estilo geek para el logo */
-        .logo-container {
-            position: fixed;
-            top: 0.5rem;
-            right: 1rem;
-            z-index: 999;
-        }
-        
-        .logo-img {
-            max-width: 70px;
-            max-height: 70px;
-            border-radius: 15px;
-            box-shadow: 0 0 15px rgba(0,102,204,0.3);
-            transition: all 0.3s ease;
-            filter: drop-shadow(0 0 5px #0066cc);
-            animation: pulse 2s infinite;
-        }
-        
-        .logo-img:hover {
-            transform: rotate(5deg) scale(1.1);
-            filter: drop-shadow(0 0 10px #0066cc);
-        }
-        
-        @keyframes pulse {
-            0% {
-                filter: drop-shadow(0 0 2px #0066cc);
-            }
-            50% {
-                filter: drop-shadow(0 0 10px #0066cc);
-            }
-            100% {
-                filter: drop-shadow(0 0 2px #0066cc);
-            }
-        }
-        
-        /* Efecto matrix para el fondo del sidebar (opcional) */
-        [data-testid="stSidebar"] {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: #0f0;
-        }
-        
-        /* Fuente geek para títulos */
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-        
-        h1, h2, h3 {
-            font-family: 'Share Tech Mono', monospace;
-            letter-spacing: 2px;
-        }
-    </style>
-    """, unsafe_allow_html=True)
