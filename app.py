@@ -1,4 +1,4 @@
-# app.py - Versión con logo en título y pie de página
+# app.py - Versión con chat centrado y paginación
 import streamlit as st
 import pandas as pd
 import unicodedata
@@ -6,6 +6,7 @@ import os
 from groq import Groq
 from PIL import Image
 import base64
+import math
 
 # Configuración de página - DEBE SER EL PRIMER COMANDO DE STREAMLIT
 st.set_page_config(
@@ -63,17 +64,40 @@ def configurar_tema_oscuro():
             color: #e0e0e0 !important;
         }
         
-        /* Input de chat */
+        /* Input de chat - CENTRADO Y RESPONSIVE */
         [data-testid="stChatInput"] {
             background-color: #1e1e2e;
             border: 1px solid #2d2d44;
             color: #e0e0e0;
+            border-radius: 30px !important;
+            padding: 12px 20px !important;
+        }
+        
+        /* Contenedor del chat input - centrado */
+        .stChatInputContainer {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Ajuste para móviles */
+        @media (max-width: 768px) {
+            .stChatInputContainer {
+                padding: 0 10px;
+            }
+            [data-testid="stChatInput"] {
+                font-size: 14px;
+            }
+            h1 {
+                font-size: 1.8rem !important;
+            }
         }
         
         /* Mensajes de chat */
         [data-testid="stChatMessage"] {
             background-color: #1e1e2e;
             border-radius: 10px;
+            margin-bottom: 10px;
         }
         
         /* Expander */
@@ -98,16 +122,18 @@ def configurar_tema_oscuro():
             color: #e0e0e0 !important;
         }
         
-        /* Botones */
+        /* Botones de paginación */
         .stButton button {
             background-color: #2d2d44;
             color: #00ff9d;
             border: none;
             border-radius: 8px;
+            transition: all 0.3s ease;
         }
         
         .stButton button:hover {
             background-color: #3d3d5e;
+            transform: scale(1.05);
         }
         
         /* Spinner */
@@ -170,6 +196,15 @@ def configurar_tema_oscuro():
         .main .block-container {
             padding-bottom: 70px;
         }
+        
+        /* Contenedor de paginación centrado */
+        .pagination-container {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -208,9 +243,8 @@ def mostrar_titulo_con_logo():
         extension = ruta_logo.split('.')[-1].lower()
         mime_type = f"image/{extension}" if extension != 'jpg' else "image/jpeg"
         
-        # Título con logo a la izquierda
         st.markdown(f"""
-        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 30px 0; gap: 15px;">
+        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 30px 0; gap: 15px; flex-wrap: wrap; text-align: center;">
             <img src="data:{mime_type};base64,{encoded_string}" 
                  style="width: 60px; height: 60px; border-radius: 12px; 
                         box-shadow: 0 0 15px rgba(0,255,157,0.3);
@@ -229,9 +263,8 @@ def mostrar_titulo_con_logo():
         </style>
         """, unsafe_allow_html=True)
     else:
-        # Logo por defecto si no existe el archivo
         st.markdown("""
-        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 30px 0; gap: 15px;">
+        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 30px 0; gap: 15px; flex-wrap: wrap; text-align: center;">
             <div style="
                 background: linear-gradient(135deg, #00ff9d, #0066cc);
                 width: 60px;
@@ -364,7 +397,103 @@ def busqueda_exhaustiva(termino, df):
             })
     
     resultados.sort(key=lambda x: x['puntaje'], reverse=True)
-    return resultados[:15]
+    return resultados
+
+def mostrar_resultados_paginados(resultados, items_por_pagina=6):
+    """Muestra resultados con paginación"""
+    if not resultados:
+        return
+    
+    total_resultados = len(resultados)
+    total_paginas = math.ceil(total_resultados / items_por_pagina)
+    
+    # Inicializar página en session state
+    if 'pagina_resultados' not in st.session_state:
+        st.session_state.pagina_resultados = 0
+    
+    # Calcular índices
+    inicio = st.session_state.pagina_resultados * items_por_pagina
+    fin = min(inicio + items_por_pagina, total_resultados)
+    
+    # Mostrar resultados de la página actual
+    st.markdown(f"**Mostrando {inicio + 1} - {fin} de {total_resultados} resultados**")
+    
+    cols = st.columns(2)
+    for i, r in enumerate(resultados[inicio:fin]):
+        with cols[i % 2]:
+            datos = r['datos']
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+                padding: 1rem;
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                border-left: 4px solid #00ff9d;
+                transition: transform 0.2s ease;
+            ">
+                <strong style="font-size: 1rem; color: #00ff9d;">📖 {datos['Titulo']}</strong><br>
+                <span style="color: #aaa;">✍️ {datos['Autor']} ({datos['Año']})</span><br>
+                <span style="color: #00ff9d;">📊 {datos['Ejemplares']} ejemplar(es)</span><br>
+                <span style="color: #888; font-size: 0.8rem;">🏷️ {datos['Temas']}</span>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Controles de paginación
+    if total_paginas > 1:
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+        
+        with col2:
+            if st.button("◀ Anterior", disabled=st.session_state.pagina_resultados == 0, key="prev_resultados"):
+                st.session_state.pagina_resultados -= 1
+                st.rerun()
+        
+        with col3:
+            st.markdown(f"<p style='text-align: center;'>Página {st.session_state.pagina_resultados + 1} de {total_paginas}</p>", unsafe_allow_html=True)
+        
+        with col4:
+            if st.button("Siguiente ▶", disabled=st.session_state.pagina_resultados >= total_paginas - 1, key="next_resultados"):
+                st.session_state.pagina_resultados += 1
+                st.rerun()
+
+def mostrar_catalogo_paginado(df, items_por_pagina=15):
+    """Muestra el catálogo completo con paginación"""
+    if df is None or df.empty:
+        return
+    
+    total_libros = len(df)
+    total_paginas = math.ceil(total_libros / items_por_pagina)
+    
+    # Inicializar página en session state
+    if 'pagina_catalogo' not in st.session_state:
+        st.session_state.pagina_catalogo = 0
+    
+    # Calcular índices
+    inicio = st.session_state.pagina_catalogo * items_por_pagina
+    fin = min(inicio + items_por_pagina, total_libros)
+    
+    # Mostrar dataframe paginado
+    st.markdown(f"**Mostrando {inicio + 1} - {fin} de {total_libros} libros**")
+    df_pagina = df[['Id', 'Titulo', 'Autor', 'Año', 'Ejemplares', 'Temas']].iloc[inicio:fin]
+    st.dataframe(df_pagina, use_container_width=True)
+    
+    # Controles de paginación
+    if total_paginas > 1:
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+        
+        with col2:
+            if st.button("◀ Anterior", disabled=st.session_state.pagina_catalogo == 0, key="prev_catalogo"):
+                st.session_state.pagina_catalogo -= 1
+                st.rerun()
+        
+        with col3:
+            st.markdown(f"<p style='text-align: center;'>Página {st.session_state.pagina_catalogo + 1} de {total_paginas}</p>", unsafe_allow_html=True)
+        
+        with col4:
+            if st.button("Siguiente ▶", disabled=st.session_state.pagina_catalogo >= total_paginas - 1, key="next_catalogo"):
+                st.session_state.pagina_catalogo += 1
+                st.rerun()
+    
+    st.caption(f"Total: {total_libros} libros")
 
 def obtener_respuesta_groq(consulta, resultados, df):
     """Obtener respuesta de Groq con los resultados"""
@@ -485,16 +614,17 @@ def main():
         2. Verifica que tenga estas columnas:
            - Id, Titulo, Autor, Año, ISBN, Temas, SubTemas, Ejemplares, Ideas principales
         """)
-        # Mostrar footer incluso si hay error
         mostrar_footer()
         return
     
+    # Catálogo con paginación
     with st.expander("📚 Ver catálogo completo", expanded=False):
-        df_preview = df[['Id', 'Titulo', 'Autor', 'Año', 'Ejemplares', 'Temas']].head(20)
-        st.dataframe(df_preview, use_container_width=True)
-        st.caption(f"Mostrando 20 de {len(df)} libros totales")
+        mostrar_catalogo_paginado(df, items_por_pagina=15)
     
+    # Contenedor centrado para el chat input
+    st.markdown('<div class="stChatInputContainer">', unsafe_allow_html=True)
     consulta = st.chat_input("🔍 Escribe tu consulta aquí...")
+    st.markdown('</div>', unsafe_allow_html=True)
     
     if consulta:
         with st.chat_message("user"):
@@ -507,25 +637,8 @@ def main():
             if resultados:
                 st.markdown("### 📚 Resultados encontrados:")
                 
-                cols = st.columns(2)
-                for i, r in enumerate(resultados[:6]):
-                    with cols[i % 2]:
-                        datos = r['datos']
-                        st.markdown(f"""
-                        <div style="
-                            background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-                            padding: 1rem;
-                            border-radius: 12px;
-                            margin: 0.5rem 0;
-                            border-left: 4px solid #00ff9d;
-                            transition: transform 0.2s ease;
-                        ">
-                            <strong style="font-size: 1rem; color: #00ff9d;">📖 {datos['Titulo']}</strong><br>
-                            <span style="color: #aaa;">✍️ {datos['Autor']} ({datos['Año']})</span><br>
-                            <span style="color: #00ff9d;">📊 {datos['Ejemplares']} ejemplar(es)</span><br>
-                            <span style="color: #888; font-size: 0.8rem;">🏷️ {datos['Temas']}</span>
-                        </div>
-                        """, unsafe_allow_html=True)
+                # Mostrar resultados paginados
+                mostrar_resultados_paginados(resultados, items_por_pagina=6)
                 
                 with st.spinner("💭 Generando respuesta..."):
                     respuesta = obtener_respuesta_groq(consulta, resultados, df)
@@ -535,7 +648,7 @@ def main():
                 st.info(respuesta)
                 
                 if resultados:
-                    st.caption(f"✨ Mejor coincidencia: {resultados[0]['puntaje']}%")
+                    st.caption(f"✨ Mejor coincidencia: {resultados[0]['puntaje']}% | Total: {len(resultados)} resultados")
                 
             else:
                 st.warning(f"❌ No encontré libros sobre '{consulta}' en nuestro catálogo.")
