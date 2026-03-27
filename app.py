@@ -1,4 +1,4 @@
-# app.py - Versión definitiva con métricas y sistema de feedback
+# app.py - Versión definitiva CORREGIDA con feedback funcionando
 import streamlit as st
 import pandas as pd
 import unicodedata
@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import json
 from collections import defaultdict
 import time
+import uuid
 
 # Configuración de página - DEBE SER EL PRIMER COMANDO DE STREAMLIT
 st.set_page_config(
@@ -420,7 +421,7 @@ class MetricasSistema:
         return Counter(terminos).most_common(limite)
 
 # ==========================================
-# SISTEMA DE FEEDBACK
+# SISTEMA DE FEEDBACK - CORREGIDO
 # ==========================================
 
 class SistemaFeedback:
@@ -437,9 +438,13 @@ class SistemaFeedback:
             try:
                 with open(self.archivo_feedback, 'r', encoding='utf-8') as f:
                     self.feedback_data = json.load(f)
-            except:
+                # Debug: Mostrar en consola que se cargó
+                print(f"Feedback cargado: {self.feedback_data['total_feedback']} feedbacks")
+            except Exception as e:
+                print(f"Error cargando feedback: {e}")
                 self.inicializar_feedback()
         else:
+            print("Creando nuevo archivo de feedback")
             self.inicializar_feedback()
     
     def inicializar_feedback(self):
@@ -461,8 +466,11 @@ class SistemaFeedback:
             os.makedirs("data", exist_ok=True)
             with open(self.archivo_feedback, 'w', encoding='utf-8') as f:
                 json.dump(self.feedback_data, f, ensure_ascii=False, indent=2)
+            print(f"Feedback guardado: {self.feedback_data['total_feedback']} total, {self.feedback_data['util']} útil, {self.feedback_data['no_util']} no útil")
+            return True
         except Exception as e:
-            st.error(f"Error al guardar feedback: {e}")
+            print(f"Error al guardar feedback: {e}")
+            return False
     
     def guardar_comentario(self, consulta, termino, comentario):
         """Guarda comentario adicional en archivo de texto"""
@@ -477,11 +485,13 @@ class SistemaFeedback:
                 f.write(f"{'='*60}\n")
             return True
         except Exception as e:
-            st.error(f"Error al guardar comentario: {e}")
+            print(f"Error al guardar comentario: {e}")
             return False
     
     def registrar_feedback(self, consulta, termino, util, resultados_count, respuesta, comentario=None):
         """Registra feedback del usuario"""
+        
+        print(f"Registrando feedback: {termino} - Util: {util}")
         
         # Actualizar contadores
         self.feedback_data['total_feedback'] += 1
@@ -538,6 +548,7 @@ class SistemaFeedback:
         if len(self.feedback_data['ultimos_feedback']) > 50:
             self.feedback_data['ultimos_feedback'] = self.feedback_data['ultimos_feedback'][-50:]
         
+        # Guardar en disco
         self.guardar_feedback()
         
         # Guardar comentario si existe
@@ -694,74 +705,79 @@ def mostrar_disclaimer():
     """, unsafe_allow_html=True)
 
 def mostrar_botones_feedback(consulta_original, termino_buscado, resultados_count, respuesta_generada):
-    """Muestra botones de feedback después de cada respuesta"""
+    """Muestra botones de feedback después de cada respuesta - CORREGIDO"""
     
-    # Usar session state para recordar si ya se dio feedback
-    feedback_key = f"feedback_given_{hash(consulta_original + datetime.now().strftime('%Y%m%d%H%M%S'))}"
+    # Usar un ID único basado en timestamp + consulta para cada feedback
+    feedback_id = f"fb_{int(time.time() * 1000)}_{hash(consulta_original) % 10000}"
     
-    if feedback_key not in st.session_state:
-        st.session_state[feedback_key] = False
+    # Verificar si ya se dio feedback para esta consulta
+    if feedback_id not in st.session_state:
+        st.session_state[feedback_id] = False
     
-    if not st.session_state[feedback_key]:
+    if not st.session_state[feedback_id]:
         st.markdown('<div class="feedback-container">', unsafe_allow_html=True)
         st.markdown("### 📝 ¿Te fue útil esta respuesta?")
         
         col1, col2, col3 = st.columns([1, 1, 4])
         
         with col1:
-            if st.button("✅ Sí, fue útil", key=f"util_{consulta_original}_{int(time.time())}"):
-                feedback_sistema.registrar_feedback(
+            if st.button("✅ Sí, fue útil", key=f"util_{feedback_id}"):
+                # Registrar feedback útil
+                success = feedback_sistema.registrar_feedback(
                     consulta=consulta_original,
                     termino=termino_buscado,
                     util=True,
                     resultados_count=resultados_count,
                     respuesta=respuesta_generada
                 )
-                st.session_state[feedback_key] = True
-                st.success("¡Gracias por tu feedback! 🙌 Mejora nuestro servicio.")
-                time.sleep(1)
-                st.rerun()
+                if success:
+                    st.session_state[feedback_id] = True
+                    st.success("✅ ¡Gracias por tu feedback! 🙌")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Error al guardar feedback")
         
         with col2:
-            if st.button("❌ No fue útil", key=f"no_util_{consulta_original}_{int(time.time())}"):
-                # Primero registrar feedback básico
-                feedback_sistema.registrar_feedback(
+            if st.button("❌ No fue útil", key=f"no_util_{feedback_id}"):
+                # Registrar feedback no útil primero
+                success = feedback_sistema.registrar_feedback(
                     consulta=consulta_original,
                     termino=termino_buscado,
                     util=False,
                     resultados_count=resultados_count,
                     respuesta=respuesta_generada
                 )
-                st.session_state[feedback_key] = True
                 
-                # Mostrar opción de comentario adicional
-                with st.expander("💬 ¿Quieres darnos más detalles para mejorar?"):
-                    comentario = st.text_area(
-                        "¿Qué podría mejorar? ¿Qué información faltaba?",
-                        placeholder="Ej: Faltaban libros más actuales, la respuesta no era precisa, etc.",
-                        key=f"comentario_{consulta_original}_{int(time.time())}"
-                    )
+                if success:
+                    st.session_state[feedback_id] = True
                     
-                    col_btn1, col_btn2 = st.columns(2)
-                    with col_btn1:
-                        if st.button("📤 Enviar comentario", key=f"enviar_{consulta_original}"):
+                    # Mostrar opción de comentario adicional
+                    with st.expander("💬 ¿Quieres darnos más detalles para mejorar?"):
+                        comentario = st.text_area(
+                            "¿Qué podría mejorar? ¿Qué información faltaba?",
+                            placeholder="Ej: Faltaban libros más actuales, la respuesta no era precisa, etc.",
+                            key=f"comentario_{feedback_id}"
+                        )
+                        
+                        if st.button("📤 Enviar comentario", key=f"enviar_{feedback_id}"):
                             if comentario and comentario.strip():
                                 feedback_sistema.guardar_comentario(
                                     consulta_original, 
                                     termino_buscado, 
                                     comentario
                                 )
-                                st.success("✅ ¡Comentario guardado! Muchas gracias por ayudarnos a mejorar.")
+                                st.success("✅ ¡Comentario guardado! Muchas gracias.")
                                 time.sleep(2)
                                 st.rerun()
                             else:
                                 st.warning("Por favor escribe un comentario antes de enviar.")
                     
-                    with col_btn2:
-                        if st.button("Omitir", key=f"omitir_{consulta_original}"):
-                            st.rerun()
-                
-                st.info("Gracias por tu feedback. Lo usaremos para mejorar el sistema. 💡")
+                    st.info("Gracias por tu feedback. Lo usaremos para mejorar el sistema. 💡")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Error al guardar feedback")
         
         st.markdown('</div>', unsafe_allow_html=True)
     else:
@@ -867,7 +883,7 @@ def mostrar_pagina_metricas():
             for termino, tasa, no_util, total in problematicos:
                 st.write(f"• **{termino}**: {tasa:.0f}% negativo ({no_util}/{total})")
         else:
-            st.info("¡Excelente! No hay términos con feedback negativo recurrente.")
+            st.info("No hay suficientes datos para mostrar")
     
     with col2:
         st.subheader("🌟 Términos con mejor feedback")
@@ -876,7 +892,7 @@ def mostrar_pagina_metricas():
             for termino, tasa, util, total in exitosos:
                 st.write(f"• **{termino}**: {tasa:.0f}% útil ({util}/{total})")
         else:
-            st.info("Aún no hay suficientes datos para mostrar.")
+            st.info("No hay suficientes datos para mostrar")
     
     st.markdown("---")
     
@@ -928,7 +944,7 @@ def mostrar_pagina_metricas():
             icono = "✅" if fb['util'] else "❌"
             st.markdown(f"{icono} **{fb['termino']}** - {fecha}")
     else:
-        st.info("Aún no hay feedback registrado")
+        st.info("Aún no hay feedback registrado. ¡Sé el primero en dar feedback!")
     
     # Botones de exportación
     st.markdown("---")
