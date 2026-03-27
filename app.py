@@ -1,5 +1,4 @@
-
-# app.py - Versión con tema oscuro y logo
+# app.py - Versión con logo en título y pie de página
 import streamlit as st
 import pandas as pd
 import unicodedata
@@ -37,10 +36,6 @@ def configurar_tema_oscuro():
         
         [data-testid="stSidebar"] * {
             color: #e0e0e0 !important;
-        }
-        
-        [data-testid="stSidebar"] .stMarkdown {
-            color: #e0e0e0;
         }
         
         /* Métricas en sidebar */
@@ -145,6 +140,36 @@ def configurar_tema_oscuro():
         ::-webkit-scrollbar-thumb:hover {
             background: #00ff9d;
         }
+        
+        /* Estilo para el footer */
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%);
+            color: #888;
+            text-align: center;
+            padding: 0.8rem;
+            font-size: 0.8rem;
+            border-top: 1px solid #2d2d44;
+            z-index: 999;
+            font-family: 'Share Tech Mono', monospace;
+        }
+        
+        .footer a {
+            color: #00ff9d;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Ajuste para que el contenido no quede oculto detrás del footer */
+        .main .block-container {
+            padding-bottom: 70px;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -172,8 +197,8 @@ def cargar_logo():
     
     return None, None
 
-def mostrar_logo():
-    """Muestra el logo en la esquina superior derecha"""
+def mostrar_titulo_con_logo():
+    """Muestra el título con el logo integrado"""
     ruta_logo, img = cargar_logo()
     
     if ruta_logo:
@@ -183,17 +208,17 @@ def mostrar_logo():
         extension = ruta_logo.split('.')[-1].lower()
         mime_type = f"image/{extension}" if extension != 'jpg' else "image/jpeg"
         
-        logo_html = f"""
-        <div style="position: fixed; top: 0.5rem; right: 1rem; z-index: 999;">
+        # Título con logo a la izquierda
+        st.markdown(f"""
+        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 30px 0; gap: 15px;">
             <img src="data:{mime_type};base64,{encoded_string}" 
-                 style="max-width: 60px; max-height: 60px; border-radius: 12px; 
+                 style="width: 60px; height: 60px; border-radius: 12px; 
                         box-shadow: 0 0 15px rgba(0,255,157,0.3);
-                        transition: transform 0.3s ease;
-                        animation: pulse 2s infinite;"
-                 alt="Logo Biblioteca"
-                 title="Biblioteca Virtual"
-                 onmouseover="this.style.transform='scale(1.05)'"
-                 onmouseout="this.style.transform='scale(1)'">
+                        animation: pulse 2s infinite;">
+            <div>
+                <h1 style="margin: 0; color: #00ff9d; font-size: 2.5rem;">📖 Bibliotecario Virtual</h1>
+                <p style="margin: 5px 0 0 0; color: #888;">Inteligencia Artificial para tu biblioteca</p>
+            </div>
         </div>
         <style>
             @keyframes pulse {{
@@ -202,29 +227,43 @@ def mostrar_logo():
                 100% {{ box-shadow: 0 0 5px rgba(0,255,157,0.3); }}
             }}
         </style>
-        """
-        st.markdown(logo_html, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     else:
+        # Logo por defecto si no existe el archivo
         st.markdown("""
-        <div style="position: fixed; top: 0.5rem; right: 1rem; z-index: 999;">
+        <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0 30px 0; gap: 15px;">
             <div style="
                 background: linear-gradient(135deg, #00ff9d, #0066cc);
-                color: #0e1117;
-                width: 55px;
-                height: 55px;
+                width: 60px;
+                height: 60px;
                 border-radius: 12px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 28px;
-                font-weight: bold;
+                font-size: 32px;
                 box-shadow: 0 0 15px rgba(0,255,157,0.3);
                 animation: pulse 2s infinite;
             ">
                 📚
             </div>
+            <div>
+                <h1 style="margin: 0; color: #00ff9d; font-size: 2.5rem;">📖 Bibliotecario Virtual</h1>
+                <p style="margin: 5px 0 0 0; color: #888;">Inteligencia Artificial para tu biblioteca</p>
+            </div>
         </div>
         """, unsafe_allow_html=True)
+
+def mostrar_footer():
+    """Muestra el pie de página con el crédito del proyecto"""
+    st.markdown("""
+    <div class="footer">
+        <span>📚 Proyecto Diseño e Implementación de Sitios Web Dinámicos</span>
+        <span style="margin: 0 10px;">•</span>
+        <span>🔧 Biblioteca Virtual con IA</span>
+        <span style="margin: 0 10px;">•</span>
+        <span>⚡ Powered by Groq & Streamlit</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ==========================================
 # FUNCIONES PRINCIPALES
@@ -391,8 +430,8 @@ def main():
     # Configurar tema oscuro
     configurar_tema_oscuro()
     
-    # Mostrar el logo en la esquina superior derecha
-    mostrar_logo()
+    # Mostrar título con logo integrado
+    mostrar_titulo_con_logo()
     
     # Sidebar
     with st.sidebar:
@@ -438,13 +477,6 @@ def main():
             st.caption(f"📁 data/BD.xlsx")
     
     # Main content
-    st.markdown("""
-    <div style="text-align: center; margin: 20px 0 40px 0;">
-        <h1>📖 Bibliotecario Virtual</h1>
-        <p style="color: #888;">Pregúntame sobre los libros disponibles en nuestra biblioteca</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
     if df is None:
         st.error("❌ No se pudo cargar la base de datos")
         st.info("""
@@ -453,6 +485,8 @@ def main():
         2. Verifica que tenga estas columnas:
            - Id, Titulo, Autor, Año, ISBN, Temas, SubTemas, Ejemplares, Ideas principales
         """)
+        # Mostrar footer incluso si hay error
+        mostrar_footer()
         return
     
     with st.expander("📚 Ver catálogo completo", expanded=False):
@@ -512,6 +546,9 @@ def main():
                 - Busca por autor en lugar de título completo
                 - Busca por tema o categoría
                 """)
+    
+    # Mostrar footer al final
+    mostrar_footer()
 
 if __name__ == "__main__":
     main()
