@@ -1,57 +1,19 @@
-# app.py
+# app.py - Versión con ruta específica data/BD.xlsx
 import streamlit as st
 import pandas as pd
-import sqlite3
 import unicodedata
 import os
 from groq import Groq
-from datetime import datetime
 
-# Configuración de la página
+# Configuración de página
 st.set_page_config(
     page_title="Bibliotecario Virtual",
     page_icon="📚",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# Estilos CSS personalizados
-st.markdown("""
-<style>
-    .stApp {
-        max-width: 1200px;
-        margin: 0 auto;
-    }
-    .result-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
-    }
-    .book-title {
-        font-size: 1.2rem;
-        font-weight: bold;
-        color: #0066cc;
-    }
-    .book-author {
-        color: #666;
-        font-style: italic;
-    }
-    .book-copies {
-        color: #28a745;
-        font-weight: bold;
-    }
-    .stats-box {
-        background-color: #e3f2fd;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        text-align: center;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # ==========================================
-# FUNCIONES DE PROCESAMIENTO
+# FUNCIONES
 # ==========================================
 
 def normalizar(texto):
@@ -79,70 +41,38 @@ def extraer_apellidos(nombre_autor):
     
     return apellidos
 
-@st.cache_data
 def cargar_datos():
-    """Carga los datos desde el archivo Excel (cacheado)"""
-    # Buscar el archivo en diferentes ubicaciones
-    posibles_rutas = [
-        "data/biblioteca.xlsx",
-        "biblioteca.xlsx",
-        "libros.xlsx",
-        "data/libros.xlsx"
-    ]
+    """Carga los datos desde data/BD.xlsx"""
     
-    archivo_encontrado = None
-    for ruta in posibles_rutas:
-        if os.path.exists(ruta):
-            archivo_encontrado = ruta
-            break
+    # Ruta específica para tu archivo
+    ruta_bd = "data/BD.xlsx"
     
-    if not archivo_encontrado:
-        st.error("""
-        ❌ No se encontró el archivo de la biblioteca.
-        
-        **Instrucciones:**
-        1. Sube tu archivo Excel en la barra lateral
-        2. O asegúrate de tener un archivo 'biblioteca.xlsx' en la carpeta 'data/'
-        """)
-        
-        # Permitir subir archivo desde la interfaz
-        archivo_subido = st.sidebar.file_uploader(
-            "📂 Sube tu archivo Excel",
-            type=['xlsx', 'xls', 'csv']
-        )
-        
-        if archivo_subido:
-            if archivo_subido.name.endswith('.csv'):
-                df = pd.read_csv(archivo_subido)
+    # Verificar si existe el archivo
+    if os.path.exists(ruta_bd):
+        try:
+            df = pd.read_excel(ruta_bd)
+            
+            # Limpiar nombres de columnas
+            df.columns = [c.strip() for c in df.columns]
+            
+            # Verificar campos
+            if 'Ejemplares' not in df.columns:
+                df['Ejemplares'] = 1
             else:
-                df = pd.read_excel(archivo_subido)
-            st.success(f"✅ Archivo cargado: {archivo_subido.name}")
-            return df, archivo_subido.name
-        else:
-            return None, None
+                df['Ejemplares'] = pd.to_numeric(df['Ejemplares'], errors='coerce').fillna(1).astype(int)
+            
+            st.sidebar.success(f"✅ BD cargada desde data/BD.xlsx")
+            st.sidebar.info(f"📊 {len(df)} libros | {df['Ejemplares'].sum()} ejemplares")
+            return df
+            
+        except Exception as e:
+            st.sidebar.error(f"Error al cargar BD: {e}")
+            return None
     
-    # Cargar desde archivo local
-    if archivo_encontrado.endswith('.csv'):
-        df = pd.read_csv(archivo_encontrado)
-    else:
-        df = pd.read_excel(archivo_encontrado)
-    
-    # Limpiar nombres de columnas
-    df.columns = [c.strip() for c in df.columns]
-    
-    # Verificar campos requeridos
-    campos_requeridos = ['Id', 'Titulo', 'Autor', 'Año', 'ISBN', 'Temas', 'SubTemas', 'Ejemplares', 'Ideas principales']
-    for campo in campos_requeridos:
-        if campo not in df.columns:
-            if campo == 'Ejemplares':
-                df[campo] = 1
-            else:
-                df[campo] = ''
-    
-    # Asegurar que Ejemplares sea numérico
-    df['Ejemplares'] = pd.to_numeric(df['Ejemplares'], errors='coerce').fillna(1).astype(int)
-    
-    return df, archivo_encontrado
+    # Si no existe el archivo, mostrar error
+    st.sidebar.error("❌ No se encontró el archivo data/BD.xlsx")
+    st.sidebar.info("💡 Asegúrate de que el archivo esté en la carpeta 'data' con el nombre 'BD.xlsx'")
+    return None
 
 def busqueda_exhaustiva(termino, df):
     """Búsqueda flexible en la base de datos"""
@@ -163,22 +93,22 @@ def busqueda_exhaustiva(termino, df):
         temas = normalizar(row.get('Temas', ''))
         subtemas = normalizar(row.get('SubTemas', ''))
         
-        # Búsqueda por título exacto
+        # Búsqueda por título
         if termino_norm in titulo:
             puntaje += 100
-            razones.append("título coincide")
+            razones.append("título")
         
         # Búsqueda por autor
         if termino_norm in autor:
             puntaje += 80
-            razones.append("autor coincide")
+            razones.append("autor")
         
         # Búsqueda por apellido
         apellidos_autor = extraer_apellidos(row.get('Autor', ''))
         for apellido in apellidos_autor:
             if apellido in termino_norm or termino_norm in apellido:
                 puntaje += 70
-                razones.append(f"apellido '{apellido}' coincide")
+                razones.append(f"apellido '{apellido}'")
         
         # Búsqueda por palabras individuales
         for palabra in palabras_busqueda:
@@ -205,34 +135,38 @@ def busqueda_exhaustiva(termino, df):
 
 def obtener_respuesta_groq(consulta, resultados, df):
     """Obtener respuesta de Groq con los resultados"""
-    api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY"))
-    
-    if not api_key:
-        return "⚠️ Error: No se encontró la API key de Groq. Configúrala en los secrets de Streamlit."
-    
-    client = Groq(api_key=api_key)
-    
-    # Construir contexto según resultados
-    if resultados:
-        contexto_str = []
-        for r in resultados[:10]:
-            datos = r['datos']
-            contexto_str.append(
-                f"- {datos['Titulo']} | {datos['Autor']} ({datos['Año']}) | "
-                f"Ejemplares: {datos['Ejemplares']} | Temas: {datos['Temas']}"
-            )
+    try:
+        # Obtener API key de secrets
+        api_key = st.secrets.get("GROQ_API_KEY")
         
-        contexto = f"""
+        if not api_key:
+            return "⚠️ Error: No se encontró la API key. Configúrala en Streamlit Secrets (Settings → Secrets)."
+        
+        client = Groq(api_key=api_key)
+        
+        # Construir contexto
+        if resultados:
+            contexto_str = []
+            for r in resultados[:10]:
+                datos = r['datos']
+                contexto_str.append(
+                    f"- TÍTULO: {datos['Titulo']} | AUTOR: {datos['Autor']} ({datos['Año']}) | "
+                    f"EJEMPLARES: {datos['Ejemplares']} | TEMAS: {datos['Temas']}"
+                )
+            
+            contexto = f"""
 LIBROS ENCONTRADOS EN LA BASE DE DATOS:
 {chr(10).join(contexto_str)}
 
-INSTRUCCIÓN: SOLO puedes mencionar los libros listados arriba. NO inventes títulos.
+INSTRUCCIÓN ESTRICTA: 
+- SOLO puedes mencionar los libros listados arriba.
+- NO inventes títulos, autores o temas.
+- Si el usuario pregunta por algo que no está en esta lista, dile que no está disponible.
 """
-    else:
-        contexto = "NO SE ENCONTRARON LIBROS EN LA BASE DE DATOS PARA ESTA BÚSQUEDA."
-    
-    # Llamar a Groq
-    try:
+        else:
+            contexto = "NO SE ENCONTRARON LIBROS EN LA BASE DE DATOS PARA ESTA BÚSQUEDA."
+        
+        # Llamar a Groq
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -241,9 +175,9 @@ INSTRUCCIÓN: SOLO puedes mencionar los libros listados arriba. NO inventes tít
                     "content": (
                         "Eres un bibliotecario amable y servicial. "
                         "SOLO respondes con información de la base de datos proporcionada. "
-                        "Si no hay resultados, dices que no hay libros sobre ese tema. "
-                        "NUNCA inventas títulos ni autores."
-                        f"\n\n{contexto}"
+                        "Si no hay resultados, dices claramente que no hay libros sobre ese tema. "
+                        "NUNCA inventas títulos, autores ni sugerencias fuera del catálogo.\n\n"
+                        f"{contexto}"
                     )
                 },
                 {
@@ -251,7 +185,7 @@ INSTRUCCIÓN: SOLO puedes mencionar los libros listados arriba. NO inventes tít
                     "content": consulta
                 }
             ],
-            temperature=0.1,
+            temperature=0.0,  # Temperatura 0 para máxima precisión
             max_tokens=300
         )
         return completion.choices[0].message.content
@@ -265,50 +199,87 @@ INSTRUCCIÓN: SOLO puedes mencionar los libros listados arriba. NO inventes tít
 def main():
     # Sidebar
     with st.sidebar:
-        st.image("https://cdn-icons-png.flaticon.com/512/2232/2232688.png", width=80)
         st.title("📚 Biblioteca Virtual")
         st.markdown("---")
         
-        # Cargar datos
-        df, archivo = cargar_datos()
+        # Cargar datos desde data/BD.xlsx
+        df = cargar_datos()
         
         if df is not None:
-            st.success(f"✅ Base de datos cargada")
-            st.info(f"📊 **Estadísticas:**\n\n- {len(df)} títulos\n- {df['Ejemplares'].sum()} ejemplares")
+            st.markdown("### 📊 Estadísticas")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("📚 Títulos", len(df))
+            with col2:
+                st.metric("📖 Ejemplares", df['Ejemplares'].sum())
             
-            # Mostrar temas más comunes
-            if 'Temas' in df.columns:
-                st.markdown("---")
-                st.subheader("🏷️ Temas disponibles")
-                temas_count = df['Temas'].value_counts().head(10)
-                for tema, count in temas_count.items():
-                    if tema and tema != '':
-                        st.write(f"- {tema} ({count})")
-            
-            # Opciones de filtro
             st.markdown("---")
-            st.subheader("🔍 Filtros rápidos")
             
-            # Filtro por autor
-            autores = df['Autor'].dropna().unique()
-            autor_seleccionado = st.selectbox("Autor", ["Todos"] + sorted(autores))
+            # Mostrar autores destacados
+            if 'Autor' in df.columns:
+                st.markdown("### ✍️ Autores destacados")
+                autores_top = df['Autor'].value_counts().head(5)
+                for autor, count in autores_top.items():
+                    if autor and autor != '':
+                        st.write(f"• {autor[:30]} ({count})")
             
-            if autor_seleccionado != "Todos":
-                df_filtrado = df[df['Autor'] == autor_seleccionado]
-                st.write(f"**{len(df_filtrado)}** libros de {autor_seleccionado}")
+            st.markdown("---")
+            
+            # Mostrar temas populares
+            if 'Temas' in df.columns:
+                st.markdown("### 🏷️ Temas populares")
+                temas_top = df['Temas'].value_counts().head(5)
+                for tema, count in temas_top.items():
+                    if tema and tema != '':
+                        st.write(f"• {tema[:30]} ({count})")
+            
+            st.markdown("---")
+            st.caption(f"📁 Fuente: data/BD.xlsx")
     
     # Main content
     st.title("📖 Bibliotecario Virtual")
     st.markdown("Pregúntame sobre los libros disponibles en nuestra biblioteca")
     
+    if df is None:
+        st.error("❌ No se pudo cargar la base de datos")
+        st.info("""
+        ### 📋 Solución:
+        1. Asegúrate de que el archivo **BD.xlsx** esté en la carpeta **data/**
+        2. Verifica que tenga estas columnas:
+           - Id
+           - Titulo
+           - Autor
+           - Año
+           - ISBN
+           - Temas
+           - SubTemas
+           - Ejemplares
+           - Ideas principales
+        """)
+        
+        # Mostrar estructura de archivos actual
+        import os
+        st.markdown("### 📂 Estructura de archivos detectada:")
+        for root, dirs, files in os.walk("."):
+            level = root.replace(".", "").count(os.sep)
+            indent = " " * 2 * level
+            st.text(f"{indent}📁 {os.path.basename(root)}/")
+            subindent = " " * 2 * (level + 1)
+            for file in files[:10]:  # Mostrar primeros 10 archivos
+                st.text(f"{subindent}📄 {file}")
+        return
+    
+    # Vista previa del catálogo
+    with st.expander("📚 Ver catálogo completo", expanded=False):
+        # Mostrar tabla con los primeros libros
+        df_preview = df[['Id', 'Titulo', 'Autor', 'Año', 'Ejemplares', 'Temas']].head(20)
+        st.dataframe(df_preview, use_container_width=True)
+        st.caption(f"Mostrando 20 de {len(df)} libros totales")
+    
     # Input de consulta
-    consulta = st.chat_input("Escribe tu consulta aquí...")
+    consulta = st.chat_input("🔍 Escribe tu consulta aquí...")
     
     if consulta:
-        if df is None:
-            st.error("❌ Primero debes cargar la base de datos en la barra lateral")
-            return
-        
         # Mostrar consulta del usuario
         with st.chat_message("user"):
             st.write(consulta)
@@ -320,46 +291,52 @@ def main():
         # Mostrar resultados
         with st.chat_message("assistant"):
             if resultados:
-                # Mostrar tabla de resultados
                 st.markdown("### 📚 Resultados encontrados:")
                 
-                # Crear DataFrame para mostrar
-                df_resultados = pd.DataFrame([r['datos'] for r in resultados])
-                
-                # Mostrar en columnas
+                # Mostrar en tarjetas
                 cols = st.columns(2)
-                for idx, (i, row) in enumerate(df_resultados.head(6).iterrows()):
-                    with cols[idx % 2]:
-                        with st.container():
-                            st.markdown(f"""
-                            <div class="result-card">
-                                <div class="book-title">📖 {row['Titulo']}</div>
-                                <div class="book-author">✍️ {row['Autor']} ({row['Año']})</div>
-                                <div class="book-copies">📊 {row['Ejemplares']} ejemplares</div>
-                                <div>🏷️ {row['Temas']}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                
-                # Mostrar estadísticas
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Títulos encontrados", len(resultados))
-                with col2:
-                    total_ejemplares = df_resultados['Ejemplares'].sum()
-                    st.metric("Total ejemplares", total_ejemplares)
-                with col3:
-                    st.metric("Coincidencia", f"{resultados[0]['puntaje']}%")
+                for i, r in enumerate(resultados[:6]):
+                    with cols[i % 2]:
+                        datos = r['datos']
+                        st.markdown(f"""
+                        <div style="
+                            background-color: #f8f9fa;
+                            padding: 0.8rem;
+                            border-radius: 0.5rem;
+                            margin: 0.5rem 0;
+                            border-left: 4px solid #0066cc;
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                        ">
+                            <strong style="font-size: 1rem;">📖 {datos['Titulo']}</strong><br>
+                            <span style="color: #666;">✍️ {datos['Autor']} ({datos['Año']})</span><br>
+                            <span style="color: #28a745;">📊 {datos['Ejemplares']} ejemplar(es)</span><br>
+                            <span style="color: #888; font-size: 0.8rem;">🏷️ {datos['Temas']}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
                 
                 # Obtener respuesta de Groq
                 with st.spinner("💭 Generando respuesta..."):
                     respuesta = obtener_respuesta_groq(consulta, resultados, df)
                 
+                st.markdown("---")
                 st.markdown("### 💬 Respuesta del bibliotecario:")
-                st.write(respuesta)
+                st.info(respuesta)
+                
+                # Mostrar nivel de coincidencia
+                if resultados:
+                    st.caption(f"✨ Mejor coincidencia: {resultados[0]['puntaje']}%")
                 
             else:
                 st.warning(f"❌ No encontré libros sobre '{consulta}' en nuestro catálogo.")
-                st.info("💡 **Sugerencias:**\n- Revisa la ortografía\n- Prueba con palabras más generales\n- Busca por autor o tema en lugar de título completo")
+                
+                # Sugerencias
+                st.markdown("""
+                💡 **Sugerencias:**
+                - Revisa la ortografía de tu búsqueda
+                - Prueba con palabras más generales
+                - Busca por autor en lugar de título completo
+                - Busca por tema o categoría
+                """)
 
 if __name__ == "__main__":
     main()
