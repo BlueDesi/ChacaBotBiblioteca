@@ -1,4 +1,4 @@
-# app.py - Versión final con respuesta 100% basada en BD
+# app.py - Versión final con métricas de acceso
 import streamlit as st
 import pandas as pd
 import unicodedata
@@ -7,6 +7,10 @@ from groq import Groq
 from PIL import Image
 import base64
 import math
+from datetime import datetime, timedelta
+import json
+from collections import defaultdict
+import time
 
 # Configuración de página - DEBE SER EL PRIMER COMANDO DE STREAMLIT
 st.set_page_config(
@@ -240,8 +244,195 @@ def configurar_tema_oscuro():
             margin: 20px 0;
             flex-wrap: wrap;
         }
+        
+        /* Estilo para métricas en la página */
+        .metric-card {
+            background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+            border-radius: 15px;
+            padding: 1rem;
+            text-align: center;
+            border-left: 4px solid #00ff9d;
+            margin: 0.5rem;
+        }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #00ff9d;
+        }
+        
+        .metric-label {
+            font-size: 0.8rem;
+            color: #888;
+        }
+        
+        .country-badge {
+            display: inline-block;
+            background: #2d2d44;
+            border-radius: 20px;
+            padding: 0.3rem 0.8rem;
+            margin: 0.2rem;
+            font-size: 0.8rem;
+        }
     </style>
     """, unsafe_allow_html=True)
+
+# ==========================================
+# SISTEMA DE MÉTRICAS
+# ==========================================
+
+class MetricasSistema:
+    """Clase para manejar las métricas de uso del sistema"""
+    
+    def __init__(self):
+        self.archivo_metricas = "data/metricas.json"
+        self.cargar_metricas()
+    
+    def cargar_metricas(self):
+        """Carga las métricas desde archivo JSON"""
+        if os.path.exists(self.archivo_metricas):
+            try:
+                with open(self.archivo_metricas, 'r', encoding='utf-8') as f:
+                    self.metricas = json.load(f)
+            except:
+                self.inicializar_metricas()
+        else:
+            self.inicializar_metricas()
+    
+    def inicializar_metricas(self):
+        """Inicializa la estructura de métricas"""
+        self.metricas = {
+            'consultas_totales': 0,
+            'consultas_por_dia': {},
+            'paises_acceso': {},
+            'ciudades_acceso': {},
+            'terminos_buscados': [],
+            'consultas_con_resultados': 0,
+            'consultas_sin_resultados': 0,
+            'ultimas_consultas': [],
+            'sesiones': {}
+        }
+        self.guardar_metricas()
+    
+    def guardar_metricas(self):
+        """Guarda las métricas en archivo JSON"""
+        try:
+            os.makedirs("data", exist_ok=True)
+            with open(self.archivo_metricas, 'w', encoding='utf-8') as f:
+                json.dump(self.metricas, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            st.error(f"Error al guardar métricas: {e}")
+    
+    def registrar_consulta(self, termino, tuvo_resultados, session_id, ip_info=None):
+        """Registra una nueva consulta en las métricas"""
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        
+        # Incrementar consultas totales
+        self.metricas['consultas_totales'] += 1
+        
+        # Registrar por día
+        if hoy not in self.metricas['consultas_por_dia']:
+            self.metricas['consultas_por_dia'][hoy] = 0
+        self.metricas['consultas_por_dia'][hoy] += 1
+        
+        # Registrar términos buscados
+        self.metricas['terminos_buscados'].append({
+            'termino': termino,
+            'fecha': datetime.now().isoformat(),
+            'resultados': tuvo_resultados
+        })
+        
+        # Mantener solo las últimas 100 consultas
+        if len(self.metricas['terminos_buscados']) > 100:
+            self.metricas['terminos_buscados'] = self.metricas['terminos_buscados'][-100:]
+        
+        # Registrar resultados
+        if tuvo_resultados:
+            self.metricas['consultas_con_resultados'] += 1
+        else:
+            self.metricas['consultas_sin_resultados'] += 1
+        
+        # Registrar última consulta
+        self.metricas['ultimas_consultas'].append({
+            'termino': termino,
+            'fecha': datetime.now().isoformat(),
+            'resultados': tuvo_resultados
+        })
+        
+        # Mantener solo últimas 20 consultas
+        if len(self.metricas['ultimas_consultas']) > 20:
+            self.metricas['ultimas_consultas'] = self.metricas['ultimas_consultas'][-20:]
+        
+        # Registrar ubicación si está disponible
+        if ip_info:
+            pais = ip_info.get('country', 'Desconocido')
+            ciudad = ip_info.get('city', 'Desconocida')
+            
+            if pais not in self.metricas['paises_acceso']:
+                self.metricas['paises_acceso'][pais] = 0
+            self.metricas['paises_acceso'][pais] += 1
+            
+            if ciudad not in self.metricas['ciudades_acceso']:
+                self.metricas['ciudades_acceso'][ciudad] = 0
+            self.metricas['ciudades_acceso'][ciudad] += 1
+        
+        # Registrar sesión
+        if session_id not in self.metricas['sesiones']:
+            self.metricas['sesiones'][session_id] = {
+                'primera_visita': datetime.now().isoformat(),
+                'consultas': 0
+            }
+        self.metricas['sesiones'][session_id]['consultas'] += 1
+        self.metricas['sesiones'][session_id]['ultima_consulta'] = datetime.now().isoformat()
+        
+        self.guardar_metricas()
+    
+    def obtener_metricas_ultimas_24h(self):
+        """Obtiene métricas de las últimas 24 horas"""
+        ahora = datetime.now()
+        hace_24h = ahora - timedelta(hours=24)
+        
+        # Filtrar consultas últimas 24h
+        consultas_24h = [c for c in self.metricas['terminos_buscados'] 
+                        if datetime.fromisoformat(c['fecha']) > hace_24h]
+        
+        # Agrupar por país (últimas 24h)
+        paises_24h = defaultdict(int)
+        # Nota: Para obtener países reales, necesitarías almacenar la ubicación por consulta
+        # Por ahora, usamos las métricas generales
+        
+        return {
+            'total_consultas': len(consultas_24h),
+            'consultas_con_resultados': sum(1 for c in consultas_24h if c['resultados']),
+            'consultas_sin_resultados': sum(1 for c in consultas_24h if not c['resultados']),
+            'terminos_populares': self.obtener_terminos_populares(consultas_24h),
+            'paises': self.metricas['paises_acceso']
+        }
+    
+    def obtener_terminos_populares(self, consultas, limite=10):
+        """Obtiene los términos más buscados"""
+        from collections import Counter
+        terminos = [c['termino'] for c in consultas]
+        return Counter(terminos).most_common(limite)
+
+# Inicializar sistema de métricas
+metricas_sistema = MetricasSistema()
+
+def obtener_informacion_ip():
+    """Intenta obtener información de IP usando API gratuita"""
+    try:
+        import requests
+        response = requests.get('https://ipapi.co/json/', timeout=2)
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                'country': data.get('country_name', 'Desconocido'),
+                'city': data.get('city', 'Desconocida'),
+                'ip': data.get('ip', 'unknown')
+            }
+    except:
+        pass
+    return None
 
 # ==========================================
 # FUNCIÓN PARA CARGAR LOGO
@@ -336,6 +527,131 @@ def mostrar_disclaimer():
         ⚡ MODO EXPERIMENTAL - Los resultados pueden ser parciales ⚡
     </div>
     """, unsafe_allow_html=True)
+
+# ==========================================
+# PÁGINA DE MÉTRICAS
+# ==========================================
+
+def mostrar_pagina_metricas():
+    """Muestra la página de métricas y estadísticas"""
+    st.markdown("""
+    <div style="text-align: center; margin: 20px 0;">
+        <span style="font-size: 48px;">📊</span>
+        <h1>Métricas del Sistema</h1>
+        <p style="color: #888;">Análisis de uso y accesos</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Obtener métricas
+    metricas_24h = metricas_sistema.obtener_metricas_ultimas_24h()
+    
+    # Métricas generales
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown("""
+        <div class="metric-card">
+            <div class="metric-value">{}</div>
+            <div class="metric-label">Consultas Totales</div>
+        </div>
+        """.format(metricas_sistema.metricas['consultas_totales']), unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <div class="metric-card">
+            <div class="metric-value">{}</div>
+            <div class="metric-label">Últimas 24h</div>
+        </div>
+        """.format(metricas_24h['total_consultas']), unsafe_allow_html=True)
+    
+    with col3:
+        tasa_exito = 0
+        if metricas_sistema.metricas['consultas_totales'] > 0:
+            tasa_exito = (metricas_sistema.metricas['consultas_con_resultados'] / 
+                         metricas_sistema.metricas['consultas_totales'] * 100)
+        st.markdown("""
+        <div class="metric-card">
+            <div class="metric-value">{:.1f}%</div>
+            <div class="metric-label">Tasa de Éxito</div>
+        </div>
+        """.format(tasa_exito), unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown("""
+        <div class="metric-card">
+            <div class="metric-value">{}</div>
+            <div class="metric-label">Sesiones Activas</div>
+        </div>
+        """.format(len(metricas_sistema.metricas['sesiones'])), unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Métricas de últimos 7 días
+    st.subheader("📈 Evolución de Consultas (Últimos 7 días)")
+    
+    # Preparar datos para gráfico
+    ultimos_7_dias = []
+    for i in range(7, 0, -1):
+        fecha = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+        consultas = metricas_sistema.metricas['consultas_por_dia'].get(fecha, 0)
+        ultimos_7_dias.append({'fecha': fecha, 'consultas': consultas})
+    
+    df_evolucion = pd.DataFrame(ultimos_7_dias)
+    st.line_chart(df_evolucion.set_index('fecha'))
+    
+    # Columnas para países y términos populares
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🌍 Países de Acceso")
+        if metricas_sistema.metricas['paises_acceso']:
+            for pais, cantidad in sorted(metricas_sistema.metricas['paises_acceso'].items(), 
+                                        key=lambda x: x[1], reverse=True):
+                st.markdown(f'<span class="country-badge">📍 {pais}: {cantidad} consultas</span>', 
+                           unsafe_allow_html=True)
+        else:
+            st.info("Aún no hay datos de ubicación disponibles")
+    
+    with col2:
+        st.subheader("🔝 Términos Más Buscados")
+        if metricas_sistema.metricas['terminos_buscados']:
+            from collections import Counter
+            terminos = [t['termino'] for t in metricas_sistema.metricas['terminos_buscados']]
+            top_terminos = Counter(terminos).most_common(10)
+            for termino, count in top_terminos:
+                st.write(f"• **{termino}**: {count} veces")
+        else:
+            st.info("Aún no hay consultas registradas")
+    
+    st.markdown("---")
+    
+    # Últimas consultas
+    st.subheader("🕐 Últimas Consultas Realizadas")
+    if metricas_sistema.metricas['ultimas_consultas']:
+        for consulta in reversed(metricas_sistema.metricas['ultimas_consultas'][-10:]):
+            fecha = datetime.fromisoformat(consulta['fecha']).strftime("%d/%m %H:%M")
+            icono = "✅" if consulta['resultados'] else "❌"
+            st.markdown(f"{icono} **{consulta['termino']}** - {fecha}")
+    else:
+        st.info("No hay consultas registradas aún")
+    
+    # Botón para exportar métricas
+    st.markdown("---")
+    if st.button("📥 Exportar Métricas (JSON)", key="export_metrics"):
+        with open(metricas_sistema.archivo_metricas, 'r', encoding='utf-8') as f:
+            json_data = f.read()
+        st.download_button(
+            label="Descargar archivo JSON",
+            data=json_data,
+            file_name=f"metricas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json"
+        )
+    
+    # Link para volver al inicio
+    st.markdown("---")
+    if st.button("🏠 Volver al Inicio"):
+        st.session_state.pagina_actual = "inicio"
+        st.rerun()
 
 # ==========================================
 # FUNCIONES PRINCIPALES
@@ -611,6 +927,14 @@ def main():
     # Configurar tema oscuro
     configurar_tema_oscuro()
     
+    # Inicializar session state
+    if 'pagina_actual' not in st.session_state:
+        st.session_state.pagina_actual = "inicio"
+    
+    # Obtener información de sesión para métricas
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = str(int(time.time() * 1000))
+    
     # Mostrar título con logo integrado
     mostrar_titulo_con_logo()
     
@@ -626,6 +950,18 @@ def main():
             <p style="color: #888;">Virtual Assistant</p>
         </div>
         """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Navegación
+        st.markdown("### 🧭 Navegación")
+        if st.button("📚 Inicio", use_container_width=True):
+            st.session_state.pagina_actual = "inicio"
+            st.rerun()
+        
+        if st.button("📊 Ver Métricas", use_container_width=True):
+            st.session_state.pagina_actual = "metricas"
+            st.rerun()
         
         st.markdown("---")
         
@@ -660,7 +996,13 @@ def main():
             st.markdown("---")
             st.caption(f"📁 data/BD.xlsx")
     
-    # Main content
+    # Mostrar página según selección
+    if st.session_state.pagina_actual == "metricas":
+        mostrar_pagina_metricas()
+        mostrar_footer()
+        return
+    
+    # Main content (página de inicio)
     if df is None:
         st.error("❌ No se pudo cargar la base de datos")
         st.info("""
@@ -687,6 +1029,15 @@ def main():
         
         with st.spinner("🔍 Buscando en la biblioteca..."):
             resultados = busqueda_exhaustiva(consulta, df)
+            
+            # Registrar métrica
+            ip_info = obtener_informacion_ip()
+            metricas_sistema.registrar_consulta(
+                termino=consulta,
+                tuvo_resultados=len(resultados) > 0,
+                session_id=st.session_state.session_id,
+                ip_info=ip_info
+            )
         
         with st.chat_message("assistant"):
             if resultados:
