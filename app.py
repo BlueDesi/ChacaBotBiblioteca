@@ -325,7 +325,7 @@ def mostrar_footer():
     """Muestra el pie de página simplificado"""
     st.markdown("""
     <div class="footer">
-        PISWD 2027
+        PISWD 2026
     </div>
     """, unsafe_allow_html=True)
 
